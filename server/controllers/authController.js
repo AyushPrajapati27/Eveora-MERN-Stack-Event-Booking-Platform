@@ -28,7 +28,9 @@ exports.register = async (req, res) => {
         });
 
         const otp = generateOTP();
+        console.log("Generated OTP:", otp);
         await OTP.create({ email, otp, action: 'account_verification' });
+        console.log("OTP saved to MongoDB");
         await sendOTPEmail(email, otp, 'account_verification');
 
         res.status(201).json({
@@ -72,14 +74,40 @@ exports.login = async (req, res) => {
 exports.verifyOTP = async (req, res) => {
     try {
         const { email, otp } = req.body;
-        const validOTP = await OTP.findOne({ email, otp, action: 'account_verification' });
+
+        console.log("========== VERIFY OTP ==========");
+        console.log("Email received:", email);
+        console.log("OTP received:", otp);
+
+        const validOTP = await OTP.findOne({
+            email: email,
+            otp: otp,
+            action: 'account_verification'
+        });
+
+        console.log("OTP found in MongoDB:", validOTP);
 
         if (!validOTP) {
-            return res.status(400).json({ message: 'Invalid or expired OTP' });
+            return res.status(400).json({
+                message: 'Invalid or expired OTP'
+            });
         }
 
-        const user = await User.findOneAndUpdate({ email }, { isVerified: true }, { new: true });
-        await OTP.deleteOne({ _id: validOTP._id }); // Delete OTP after usage
+        const user = await User.findOneAndUpdate(
+            { email },
+            { isVerified: true },
+            { new: true }
+        );
+
+        console.log("User found:", user);
+
+        if (!user) {
+            return res.status(404).json({
+                message: 'User not found'
+            });
+        }
+
+        await OTP.deleteOne({ _id: validOTP._id });
 
         res.json({
             _id: user.id,
@@ -88,7 +116,13 @@ exports.verifyOTP = async (req, res) => {
             role: user.role,
             token: generateToken(user.id, user.role)
         });
+
     } catch (error) {
-        res.status(500).json({ message: 'Server Error' });
+        console.error("VERIFY OTP ERROR:", error);
+
+        res.status(500).json({
+            message: 'Server Error',
+            error: error.message
+        });
     }
 };
